@@ -13,4 +13,4 @@ dd if=/dev/random bs=1 count=$numbers of=numbers
 mpirun -oversubscribe --prefix /usr/local/share/OpenMPI -np $proc oems
 
 #uklid
-#rm -f oems numbers
+rm -f oems numbers
