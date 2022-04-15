@@ -9,9 +9,7 @@
 
 using namespace std;
 
-Edge::Edge() {
-
-}
+Edge::Edge() {}
 
 Edge::Edge(char from, char to) {
     this->from = from;
@@ -25,12 +23,18 @@ Edge::Edge(int id, char from, char to) {
     this->id = id;
 }
 
-/*
-Neighbour::Neighbour(int edgeIds[2], string edgesDirs) {
-    //Edge edgeFrom;
-    // TODO!
-}*/
+void Edge::printEdge() {
+    cout << "ID: " << this->id << "; from: " << this->from << "; to: " << this->to << endl;
+}
 
+Neighbour::Neighbour() {}
+
+Neighbour::Neighbour(int edgeIds[2], string edgesDirs) {
+    Edge edgeFrom(edgeIds[0], edgesDirs.at(0), edgesDirs.at(1));
+    Edge edgeTo(edgeIds[1], edgesDirs.at(2), edgesDirs.at(3));
+    this->edgeFromNode = edgeFrom;
+    this->edgeToNode = edgeTo;
+}
 
 string Neighbour::convertEdgeNodesToString() {
     char arr[] = {this->edgeFromNode.from, this->edgeFromNode.to,
@@ -42,6 +46,13 @@ string Neighbour::convertEdgeNodesToString() {
 void Neighbour::convertEdgeIdToArr(int ids[]) {
     ids[0] = this->edgeFromNode.id;
     ids[1] = this->edgeToNode.id;
+}
+
+void Neighbour::printNeighbour() {
+    cout << "Neighbour\nFROM: ";
+    this->edgeFromNode.printEdge();
+    cout << "TO: ";
+    this->edgeToNode.printEdge();
 }
 
 Tree createTree(string nodes) {
@@ -95,11 +106,11 @@ Edge createReverseEdge(Edge edge) {
 
 void convertTreeToOrientedGraph(Tree* tree) {
     vector<Edge> newEdges;
+    newEdges = tree->edges;
 
     // Prechádzame všetkými hranami stromu
     // Každú hranu (u,v) nahradíme dvoma hranami (u,v) a (v,u)
     for(const auto& oldEdge: tree->edges) {
-        newEdges.push_back(oldEdge); // Vlož pôvodnú hranu
         Edge reverseEdge = createReverseEdge(oldEdge); // Vytvor opačnú hranu
         newEdges.push_back(reverseEdge);
     }
@@ -154,8 +165,6 @@ vector<vector<Neighbour>> createNeighboursVector(Tree og) {
 int sendNeighboursToProcessor(vector<Neighbour> neighbours, int receiverRank) {
     // Konvertovať vektor na pole
     int numNeighbours = neighbours.size();
-    cout << numNeighbours << " neighbours." << endl;
-    //int edgeIds[numNeighbours * 2];
     int *edgeIds = new int[numNeighbours * 2];
     string edgesStr = "";
 
@@ -164,19 +173,13 @@ int sendNeighboursToProcessor(vector<Neighbour> neighbours, int receiverRank) {
         int tmpIds[2] = {};
         neighbours[i].convertEdgeIdToArr(tmpIds);
         edgeIds[2*i] = tmpIds[0]; edgeIds[2*i+1] = tmpIds[1];
-
         edgesStr.append(neighbours[i].convertEdgeNodesToString());
-
-        cout << tmpIds[0] << " " << tmpIds[1] << endl;
-        cout << edgesStr << endl;
     }
 
     // Poslať 3 správy: najprv počet susedov, potom int array s edge IDs, potom char[] s odkiaľ kam idú hrany
-    // TODO
     MPI_Send(&numNeighbours, 1, MPI_INT, receiverRank, 0, MPI_COMM_WORLD);
     MPI_Send(edgeIds, numNeighbours * 2 ,MPI_INT, receiverRank, 0, MPI_COMM_WORLD);
     MPI_Send(edgesStr.c_str(), numNeighbours * 4 ,MPI_CHAR, receiverRank, 0, MPI_COMM_WORLD);
-    cout << "After send" << endl;
 
     return 0;
 }
@@ -185,28 +188,27 @@ int receiveNeighbours(vector<Neighbour> *neighbours) {
     // Prijmi počet susedov
     int numNeighbours;
     MPI_Recv(&numNeighbours, 1, MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    cout << "Received numNeighbours " << numNeighbours << endl;
 
     // Prijmi pole s ID hrán susedov
     int *edgeIds = new int[numNeighbours * 2];
     MPI_Recv(edgeIds, numNeighbours * 2, MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    // TODO remove
-    cout << "Received EdgeIds: ";
-    for (int i = 0; i < numNeighbours * 2; i++)
-        cout << edgeIds[i] << " ";
-    cout << endl;
-
     // Prijmi reťazec so smerovaniami hrán
     char *edgesCharArr = new char[numNeighbours * 4];
     MPI_Recv(edgesCharArr, numNeighbours * 4, MPI_CHAR, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     string edgesStr(edgesCharArr);
-    cout << "Received EdgesStr: " << edgesStr << endl;
+
+    // Prekonvertovať do Neighbour objektov
+    for (int i = 0; i < numNeighbours; i++) {
+        int tmpIds[] = {edgeIds[i*2], edgeIds[i*2+1]};
+        Neighbour tmpNeighbour(tmpIds, edgesStr.substr(i*4,4));
+        neighbours->push_back(tmpNeighbour);
+    }
 
     return 0;
 }
 
-int Edge::idCounter = 0; // TODO: od akého čísla číslovať hrany?
+int Edge::idCounter = 0;
 
 int main(int argc, char *argv[]) {
     int rank, num_proc; 
@@ -217,11 +219,7 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &num_proc); // get the number of processes
     MPI_Comm_rank(MPI_COMM_WORLD, &rank); // get the rank of the process
 
-    //cout << "Hello world from rank " << rank << endl;
-    
     if (rank == ROOT) {
-        cout << "Total number of processors: " << num_proc << endl;
-
         // Vytvoríme strom zo zadaných vrcholov - treba vytvoriť hrany
         Tree tree = createTree(nodesString);
         // Konvertujeme strom na orientovaný graf
@@ -230,25 +228,27 @@ int main(int argc, char *argv[]) {
 
         // Vytvor zoznam susedov
         vector<vector<Neighbour>> neighboursVec = createNeighboursVector(tree);
-        cout << "Neighbours determined." << endl;
 
         // ROOT procesor rozošle príslušný zoznam (vektor) susedov každému procesoru
-
         for (int receiver = 0; receiver < num_proc; receiver++) {
-            cout << "Sending neighbours vector to rank " << receiver << endl;
-            sendNeighboursToProcessor(neighboursVec[receiver], receiver);
-
-            break;
+            // Poslať ID hrany o ktorú sa má starať
+            MPI_Send(&tree.edges[receiver].id, 1, MPI_INT, receiver, 0, MPI_COMM_WORLD);
+            for (int vecIdx = 0; vecIdx < neighboursVec.size(); vecIdx++)
+                sendNeighboursToProcessor(neighboursVec[vecIdx], receiver);
         }
     }
 
     // Všetky procesory príjmu info o susedoch svojho uzla
-    // TODO
-    if (rank == ROOT) { // TODO: vymazat, tmp iba na testovanie posielania
+    int edgeIdToProcess;
+    MPI_Recv(&edgeIdToProcess, 1, MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+    for (int vecIdx = 0; vecIdx < nodesString.length(); vecIdx++) {
         int numNeighbours;
         vector<Neighbour> thisNodeNeighbours; // Vektor susedov pre uzol, ktorý spracováva tento rank
         receiveNeighbours(&thisNodeNeighbours);
     }
+
+    cout << "I'm rank " << rank << " and I'm responsible for edge ID " << edgeIdToProcess << endl;
 
     // Finalize the MPI environment.
     MPI_Finalize();

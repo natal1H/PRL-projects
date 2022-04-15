@@ -27,6 +27,7 @@ public:
     Edge();
     Edge(char from, char to);
     Edge(int id, char from, char to);
+    void printEdge();
 };
 
 // Strom T = (V,E), V - vrcholy, E - hrany
@@ -40,9 +41,11 @@ class Neighbour {
 public:
     Edge edgeToNode;
     Edge edgeFromNode;
-    //Neighbour(int edgeIds[2], string edgesDirs);
+    Neighbour();
+    Neighbour(int edgeIds[2], string edgesDirs);
     string convertEdgeNodesToString();
     void convertEdgeIdToArr(int ids[]);
+    void printNeighbour();
 };
 
 Tree createTree(string nodes);
