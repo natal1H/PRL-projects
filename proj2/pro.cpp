@@ -257,8 +257,6 @@ int getEtourElement(int edgeIdToProcess, vector<vector<Neighbour>> neighboursVec
     int vecIdx, insideIdx;
     getReverseEdgeIndexes(neighboursVec, edgeReveseId, &vecIdx, &insideIdx);
 
-    //cout << "\tMy edgeID " << edgeIdToProcess << " has reverseEdgeID " << edgeReveseId << " on position [" << vecIdx << ", " << insideIdx << "] in the neighboursVec" << endl;
-
     // Pozri, či položka s reverseEdge má ešte nasledovníka (cez indexy vektorov)
     if (insideIdx != neighboursVec[vecIdx].size()-1) {
         // Nie je poslednou položkou vektora - vráť ID nasledovnej položky
@@ -270,12 +268,54 @@ int getEtourElement(int edgeIdToProcess, vector<vector<Neighbour>> neighboursVec
     }
 }
 
+int determineEdgeWeight(int edgeId, vector<vector<Neighbour>> neighboursVec) {
+    for (int i = 0; i < neighboursVec.size(); i++) {
+        // Iterovať už v zozname susedov konkrétneho uzlu
+        for (int j = 0; j < neighboursVec[i].size(); j++) {
+            Neighbour tmpNeighbour = neighboursVec[i][j];
+            if (tmpNeighbour.edgeFromNode.id == edgeId) {
+                return 1; // Dopredná hrana
+            }
+            else if (tmpNeighbour.edgeToNode.id == edgeId) {
+                return 0; // Spätná hrana
+            }
+        }
+    }
+    return -1; // Chyba, ale nemala by nastať
+}
+
+void sendEtourElement(int eTour) {
+    // Pošli Etour element ROOT procesoru
+    MPI_Send(&eTour, 1, MPI_INT, ROOT, 0, MPI_COMM_WORLD);
+}
+
+int receiveEtourElement(int senderRank) {
+    // Prijmi eTour element a ulož na správne miesto v poli
+    int eTourVal;
+    MPI_Recv(&eTourVal, 1, MPI_INT, senderRank, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    return eTourVal;
+}
+
+void correctEtour(int eTourLen, int eTours[], Tree tree) {
+    char rootNode = tree.nodes.at(0);
+    int lastEdgeToRoot;
+
+    for (int i = eTourLen-1; i >= 0; i--) {
+        if (tree.edges[i].to == rootNode) {
+            lastEdgeToRoot =  tree.edges[i].id;
+            eTours[eTourLen-1] = lastEdgeToRoot;
+            return;
+        }
+    }
+}
+
 int Edge::idCounter = 0;
 
 int main(int argc, char *argv[]) {
-    int rank, num_proc; 
-
+    int rank, num_proc;
     string nodesString = argv[1];
+    Tree tree;
+    vector<vector<Neighbour>> neighboursVec;
 
     MPI_Init(&argc, &argv); // initialize the MPI environment
     MPI_Comm_size(MPI_COMM_WORLD, &num_proc); // get the number of processes
@@ -283,13 +323,13 @@ int main(int argc, char *argv[]) {
 
     if (rank == ROOT) {
         // Vytvoríme strom zo zadaných vrcholov - treba vytvoriť hrany
-        Tree tree = createTree(nodesString);
+        tree = createTree(nodesString);
         // Konvertujeme strom na orientovaný graf
         convertTreeToOrientedGraph(&tree);
-        printTree(tree);
+        //printTree(tree);
 
         // Vytvor zoznam susedov
-        vector<vector<Neighbour>> neighboursVec = createNeighboursVector(tree);
+        neighboursVec = createNeighboursVector(tree);
 
         // ROOT procesor rozošle príslušný zoznam (vektor) susedov každému procesoru
         for (int receiver = 0; receiver < num_proc; receiver++) {
@@ -303,19 +343,44 @@ int main(int argc, char *argv[]) {
     // Všetky procesory príjmu info o susedoch svojho uzla
     int edgeIdToProcess;
     MPI_Recv(&edgeIdToProcess, 1, MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    vector<vector<Neighbour>> processorCopyNeighboursVec; // Kópia zoznamu susedov, ktorú prijme každý procesor
 
     for (int vecIdx = 0; vecIdx < nodesString.length(); vecIdx++) {
         int numNeighbours;
         vector<Neighbour> thisNodeNeighbours; // Vektor susedov pre uzol, ktorý spracováva tento rank
         receiveNeighbours(&thisNodeNeighbours);
-        processorCopyNeighboursVec.push_back(thisNodeNeighbours);
+        neighboursVec.push_back(thisNodeNeighbours);
     }
-    cout << "I'm rank " << rank << " and I'm responsible for edge ID " << edgeIdToProcess << endl;
 
     // Paralelný výpočet poľa Etour, každý procesor jeden prvok
-    int eTourElem = getEtourElement(edgeIdToProcess, processorCopyNeighboursVec);
-    cout << "eTour pre edgeID " << edgeIdToProcess << " = " << eTourElem << endl;
+    int eTourElem = getEtourElement(edgeIdToProcess, neighboursVec);
+
+    // Paralelný výpočet váhy hrany - 1 ak dopredná, 0 ak spätná
+    int edgeWeight = determineEdgeWeight(edgeIdToProcess, neighboursVec);
+
+    // Korekcia Eulerovej cesty procesorom ROOT, ROOT prijme
+    if (rank == ROOT) {
+        int eTours[num_proc];
+        eTours[0] = eTourElem; // ROOT rovno uloží svoj vypočítaný element
+        for (int proc = 1; proc < num_proc; proc++)
+            eTours[proc] = receiveEtourElement(proc);
+
+        cout << "ETOUR: ";
+        for (int proc = 0; proc < num_proc; proc++)
+            cout << eTours[proc] << " ";
+        cout << endl;
+
+        // Uprav Eulerovu cestu - hrana, ktorá posledná vedie do koreňového uzla sa dá na koniec
+        correctEtour(num_proc, eTours, tree);
+
+        cout << "ETOUR after correction: ";
+        for (int proc = 0; proc < num_proc; proc++)
+            cout << eTours[proc] << " ";
+        cout << endl;
+    }
+    else {
+        // non-ROOT procesor zasiela svoj eTourElem ROOT procesoru
+        sendEtourElement(eTourElem);
+    }
 
     // Finalize the MPI environment.
     MPI_Finalize();
