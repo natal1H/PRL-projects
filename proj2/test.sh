@@ -1,7 +1,9 @@
 #!/bin/bash
 
 if [ $# -eq 1 ]; then
-    proc=2
+    nodesStr=$1
+    length=$(expr length "$nodesStr")
+    proc=$((2*length-2))
 
     #preklad cpp zdrojaku
     #mpic++ --prefix /usr/local/share/OpenMPI -o pro pro.cpp
@@ -9,7 +11,7 @@ if [ $# -eq 1 ]; then
 
     #spusteni
     #mpirun -oversubscribe --prefix /usr/local/share/OpenMPI -np $proc pro
-    mpirun --prefix /usr/share/OpenMPI -np $proc pro $1
+    mpirun -oversubscribe --prefix /usr/share/OpenMPI -np $proc pro $1
 
     #uklid
     rm -f pro

@@ -11,8 +11,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <map>
 #include <mpi.h>
+
+#define ROOT 0
 
 using namespace std;
 
@@ -21,8 +22,11 @@ public:
     int id;
     char from;
     char to;
-
     static int idCounter;
+
+    Edge();
+    Edge(char from, char to);
+    Edge(int id, char from, char to);
 };
 
 // Strom T = (V,E), V - vrcholy, E - hrany
@@ -36,6 +40,9 @@ class Neighbour {
 public:
     Edge edgeToNode;
     Edge edgeFromNode;
+    //Neighbour(int edgeIds[2], string edgesDirs);
+    string convertEdgeNodesToString();
+    void convertEdgeIdToArr(int ids[]);
 };
 
 Tree createTree(string nodes);
@@ -43,8 +50,10 @@ void printTree(Tree tree); // pomocná funkcia
 void printEdges(vector<Edge> edges); // pomocná funkcia
 void convertTreeToOrientedGraph(Tree* tree);
 Edge createReverseEdge(Edge edge);
-map<char, vector<Neighbour>> createNeighboursMap(Tree og); // og - orientovaný graf
+vector<vector<Neighbour>> createNeighboursVector(Tree og); // og - orientovaný graf
 vector<Edge> getEdgesWithFrom(vector<Edge> edges, char from);
 Edge findReverseEdge(vector<Edge> edges, Edge edge);
+int sendNeighboursToProcessor(vector<Neighbour> neighbours, int receiverRank);
+int receiveNeighbours(vector<Neighbour> *neighbours);
 
 #endif
