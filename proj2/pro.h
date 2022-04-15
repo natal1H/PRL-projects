@@ -58,5 +58,8 @@ vector<Edge> getEdgesWithFrom(vector<Edge> edges, char from);
 Edge findReverseEdge(vector<Edge> edges, Edge edge);
 int sendNeighboursToProcessor(vector<Neighbour> neighbours, int receiverRank);
 int receiveNeighbours(vector<Neighbour> *neighbours);
+Neighbour findNeighbourWithFromId(vector<vector<Neighbour>> neighboursVec, int fromId);
+void getReverseEdgeIndexes(vector<vector<Neighbour>> neighboursVec, int revEdgeId, int *vecIdx, int *insideIdx);
+int getEtourElement(int edgeIdToProcess, vector<vector<Neighbour>> neighboursVec);
 
 #endif

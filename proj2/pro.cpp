@@ -208,6 +208,68 @@ int receiveNeighbours(vector<Neighbour> *neighbours) {
     return 0;
 }
 
+Neighbour findNeighbourWithFromId(vector<vector<Neighbour>> neighboursVec, int fromId) {
+    // Pozor: predpokladá že určite taký sused existuje
+
+    Neighbour foundNeighbour;
+    bool found = false;
+
+    // Iterovať nad zoznamami susedov všetkých uzlov
+    for (int vecIdx = 0; vecIdx < neighboursVec.size(); vecIdx++) {
+        // Iterovať už v zozname susedov konkrétneho uzlu
+        for (int insideIdx = 0; insideIdx < neighboursVec[vecIdx].size(); insideIdx++) {
+            Neighbour tmpNeighbour = neighboursVec[vecIdx][insideIdx];
+            if (tmpNeighbour.edgeFromNode.id == fromId) {
+                foundNeighbour = tmpNeighbour;
+                found = true;
+                break;
+            }
+        }
+        if (found) break;
+    }
+
+    return foundNeighbour;
+}
+
+void getReverseEdgeIndexes(vector<vector<Neighbour>> neighboursVec, int revEdgeId, int *vecIdx, int *insideIdx) {
+    // Iterovať nad zoznamami susedov všetkých uzlov
+    for (int i = 0; i < neighboursVec.size(); i++) {
+        // Iterovať už v zozname susedov konkrétneho uzlu
+        for (int j = 0; j < neighboursVec[i].size(); j++) {
+            Neighbour tmpNeighbour = neighboursVec[i][j];
+            if (tmpNeighbour.edgeFromNode.id == revEdgeId) {
+                *vecIdx = i;
+                *insideIdx = j;
+                return;
+            }
+        }
+    }
+}
+
+int getEtourElement(int edgeIdToProcess, vector<vector<Neighbour>> neighboursVec) {
+    // Získať suseda, ktorý obsahuje hranu e
+    Neighbour neighbourWithE = findNeighbourWithFromId(neighboursVec, edgeIdToProcess);
+
+    // Vytiahnuť zo suseda ID hrany e_r (reverse hrana)
+    int edgeReveseId = neighbourWithE.edgeToNode.id;
+
+    // Vytiahnuť z neighboursVec indexy, kde sa nachádza e_r
+    int vecIdx, insideIdx;
+    getReverseEdgeIndexes(neighboursVec, edgeReveseId, &vecIdx, &insideIdx);
+
+    //cout << "\tMy edgeID " << edgeIdToProcess << " has reverseEdgeID " << edgeReveseId << " on position [" << vecIdx << ", " << insideIdx << "] in the neighboursVec" << endl;
+
+    // Pozri, či položka s reverseEdge má ešte nasledovníka (cez indexy vektorov)
+    if (insideIdx != neighboursVec[vecIdx].size()-1) {
+        // Nie je poslednou položkou vektora - vráť ID nasledovnej položky
+        return neighboursVec[vecIdx][insideIdx+1].edgeFromNode.id;
+    }
+    else {
+        // reverse hrana je poslednom položkou zoznamu
+        return edgeReveseId;
+    }
+}
+
 int Edge::idCounter = 0;
 
 int main(int argc, char *argv[]) {
@@ -241,14 +303,19 @@ int main(int argc, char *argv[]) {
     // Všetky procesory príjmu info o susedoch svojho uzla
     int edgeIdToProcess;
     MPI_Recv(&edgeIdToProcess, 1, MPI_INT, ROOT, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    vector<vector<Neighbour>> processorCopyNeighboursVec; // Kópia zoznamu susedov, ktorú prijme každý procesor
 
     for (int vecIdx = 0; vecIdx < nodesString.length(); vecIdx++) {
         int numNeighbours;
         vector<Neighbour> thisNodeNeighbours; // Vektor susedov pre uzol, ktorý spracováva tento rank
         receiveNeighbours(&thisNodeNeighbours);
+        processorCopyNeighboursVec.push_back(thisNodeNeighbours);
     }
-
     cout << "I'm rank " << rank << " and I'm responsible for edge ID " << edgeIdToProcess << endl;
+
+    // Paralelný výpočet poľa Etour, každý procesor jeden prvok
+    int eTourElem = getEtourElement(edgeIdToProcess, processorCopyNeighboursVec);
+    cout << "eTour pre edgeID " << edgeIdToProcess << " = " << eTourElem << endl;
 
     // Finalize the MPI environment.
     MPI_Finalize();
