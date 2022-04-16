@@ -11,6 +11,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <map>
 #include <math.h>
 #include <mpi.h>
 
@@ -66,7 +67,7 @@ int determineEdgeWeight(int edgeId, vector<vector<Neighbour>> neighboursVec);
 void sendEtourElement(int eTour, int receiverRank);
 void receiveEtourElement(int senderRank, int *eTourVal);
 void correctEtour(int eTourLen, int eTours[], Tree tree);
-void suffixSum(int rank, int numProcessors, int edgeId, int *eTour, int *weight);
+int suffixSum(int numProcessors, int edgeId, int eTours[], int weights[]);
 Edge findEdgeWithId(vector<Edge> edges, int id);
 
 #endif
