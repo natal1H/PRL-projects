@@ -264,7 +264,8 @@ int getEtourElement(int edgeIdToProcess, vector<vector<Neighbour>> neighboursVec
     }
     else {
         // reverse hrana je poslednom položkou zoznamu
-        return edgeReveseId;
+        //return edgeReveseId; // TODO: asi nie je dobre
+        return neighboursVec[vecIdx][0].edgeFromNode.id;
     }
 }
 
@@ -284,9 +285,9 @@ int determineEdgeWeight(int edgeId, vector<vector<Neighbour>> neighboursVec) {
     return -1; // Chyba, ale nemala by nastať
 }
 
-void sendEtourElement(int eTour) {
+void sendEtourElement(int eTour, int receiverRank) {
     // Pošli Etour element ROOT procesoru
-    MPI_Send(&eTour, 1, MPI_INT, ROOT, 0, MPI_COMM_WORLD);
+    MPI_Send(&eTour, 1, MPI_INT, receiverRank, 0, MPI_COMM_WORLD);
 }
 
 int receiveEtourElement(int senderRank) {
@@ -296,17 +297,58 @@ int receiveEtourElement(int senderRank) {
     return eTourVal;
 }
 
-void correctEtour(int eTourLen, int eTours[], Tree tree) {
-    char rootNode = tree.nodes.at(0);
-    int lastEdgeToRoot;
-
-    for (int i = eTourLen-1; i >= 0; i--) {
-        if (tree.edges[i].to == rootNode) {
-            lastEdgeToRoot =  tree.edges[i].id;
-            eTours[eTourLen-1] = lastEdgeToRoot;
-            return;
+Edge findEdgeWithId(vector<Edge> edges, int id) {
+    Edge foundEdge;
+    for (int i = 0; i < edges.size(); i++) {
+        if (edges[i].id == id) {
+            foundEdge = edges[i];
+            break;
         }
     }
+    return foundEdge;
+}
+
+void correctEtour(int eTourLen, int eTours[], Tree tree) {
+    char rootNode = tree.nodes.at(0);
+    int lastEdgeIdToRoot = -1;
+
+    int counter = 0;
+    int edgeTourToLookAt = 0;
+    while (counter < eTourLen) {
+        if (counter > 0) {
+            edgeTourToLookAt = eTours[edgeTourToLookAt];
+        }
+        int edgeIdToLookAt = eTours[edgeTourToLookAt];
+
+        if (findEdgeWithId(tree.edges, edgeIdToLookAt).to == rootNode) {
+            lastEdgeIdToRoot = edgeIdToLookAt;
+        }
+        counter++;
+    }
+    eTours[lastEdgeIdToRoot] = lastEdgeIdToRoot;
+}
+
+void suffixSum(int rank, int numProcessors, int edgeId, int *eTour, int *weight) {
+    // Procesor, ktorý sa stará o poslednú hranu vykoná úpravu hodnoty weight
+    bool wasLast = false;
+    int originalWeight = *weight;
+
+    if (*eTour == edgeId) {
+        // Posledný element Eulerovej cesty
+        *weight = 0; // Neutrálny prvok
+        wasLast = true;
+    }
+
+    // Cyklus do log n, k hodnote váhy a pripočíta váha nasledovníka danej hrany
+    // a do hodnoty nasledovníka sa priradí hodnota môjho nasledovníka
+
+    for (int k = 0; k <= ceil(log((double) numProcessors)); k++) {
+
+    }
+
+    // Úprava hodnôt váh v prípade, že pôvodná hodnota váhy v poslednom procesore != 0,
+    // tak táto hodnota sa pripočíta k všetkým hodnotám váh
+
 }
 
 int Edge::idCounter = 0;
@@ -326,7 +368,7 @@ int main(int argc, char *argv[]) {
         tree = createTree(nodesString);
         // Konvertujeme strom na orientovaný graf
         convertTreeToOrientedGraph(&tree);
-        //printTree(tree);
+        printTree(tree);
 
         // Vytvor zoznam susedov
         neighboursVec = createNeighboursVector(tree);
@@ -356,6 +398,7 @@ int main(int argc, char *argv[]) {
 
     // Paralelný výpočet váhy hrany - 1 ak dopredná, 0 ak spätná
     int edgeWeight = determineEdgeWeight(edgeIdToProcess, neighboursVec);
+    cout << "Weight for edgeID " << edgeIdToProcess << " = " << edgeWeight << endl;
 
     // Korekcia Eulerovej cesty procesorom ROOT, ROOT prijme
     if (rank == ROOT) {
@@ -376,11 +419,21 @@ int main(int argc, char *argv[]) {
         for (int proc = 0; proc < num_proc; proc++)
             cout << eTours[proc] << " ";
         cout << endl;
+
+        // Treba rozoslať upravený ETour procesom
+        for (int proc = 1; proc < num_proc; proc++)
+            sendEtourElement(eTours[proc], proc);
     }
     else {
         // non-ROOT procesor zasiela svoj eTourElem ROOT procesoru
-        sendEtourElement(eTourElem);
+        sendEtourElement(eTourElem, ROOT);
+        eTourElem = receiveEtourElement(ROOT);
     }
+
+    cout << "I'm rank " << rank << ", my edgeID is " << edgeIdToProcess << ", my new eTour is " << eTourElem << endl;
+
+    // Každý procesor vykonáva sumu suffixov
+    //suffixSum(rank, num_proc, edgeIdToProcess, &eTourElem, &edgeWeight);
 
     // Finalize the MPI environment.
     MPI_Finalize();
