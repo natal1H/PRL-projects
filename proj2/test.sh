@@ -6,12 +6,10 @@ if [ $# -eq 1 ]; then
     proc=$((2*length-2))
 
     #preklad cpp zdrojaku
-    #mpic++ --prefix /usr/local/share/OpenMPI -o pro pro.cpp
-    mpic++ --prefix /usr/share/OpenMPI -o pro pro.cpp
+    mpic++ --prefix /usr/local/share/OpenMPI -o pro pro.cpp
 
     #spusteni
-    #mpirun -oversubscribe --prefix /usr/local/share/OpenMPI -np $proc pro
-    mpirun -oversubscribe --prefix /usr/share/OpenMPI -np $proc pro $1
+    mpirun -oversubscribe --prefix /usr/local/share/OpenMPI -np $proc pro $1
 
     #uklid
     rm -f pro
